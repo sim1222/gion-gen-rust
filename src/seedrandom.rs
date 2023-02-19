@@ -91,10 +91,13 @@ impl SeedRandom {
         println!("prng now");
         // start generating random numbers
         println!("CHUNKS: {}", CHUNKS);
-        let mut n = self.arc.borrow_mut().clone().g(CHUNKS); // TODO: cannot change arc.s in g function
+
+        let arc = self.arc.clone();
+
+        let mut n = arc.clone().g(CHUNKS); // TODO: does not change arc.s in g function
         let mut d = self.d;
         let mut x = self.x;
-        println!("s: {:?}", self.arc.borrow_mut().clone().s);
+        println!("s: {:?}", arc.clone().s);
 
         while n < SIGN_IFICANCE as u128 {
             // println!("n: {}", n);
@@ -249,8 +252,14 @@ impl ARC4 {
             j = MASK as u32 & tj;
             println!("j: {}", j);
             s[i as usize] = s[j as usize];
+            if s[i as usize] != s[j as usize] {
+                panic!("s[i] is not equal to s[j]: {}", s[i as usize])
+            }
             println!("s[i]: {}", s[i as usize]);
             s[j as usize] = t;
+            if s[j as usize] != t {
+                panic!("s[j] is not equal to t: {}", s[j as usize])
+            }
             println!("s[j]: {}", s[j as usize]);
             let ts: u128 = s[i as usize] as u128 + s[j as usize] as u128;
             println!("ts: {}", ts);
@@ -263,6 +272,7 @@ impl ARC4 {
         println!("r: {}", r);
         println!("i: {}", i);
         println!("j: {}", j);
+        println!("s last: {:?}", s); // s is not changed outside of the function
         return r;
     }
 }
