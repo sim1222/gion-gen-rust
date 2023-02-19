@@ -79,13 +79,13 @@ async fn main() {
 
     let start = Instant::now();
 
-    let num = 100;
+    let num = 100000;
 
     for _ in 0..num {
-        println!("{}", generate(None));
-        // generate();
+        // println!("{}", generate(None));
+        generate(None);
         // thread::spawn(move || {
-        //     generate();
+        //     println!("{}", generate(None));
         // });
     }
 
@@ -96,4 +96,6 @@ async fn main() {
         end.as_secs(),
         end.subsec_nanos() / 1_000_000
     );
+
+    seedrandom::seed_random("9999999999999999999");
 }
