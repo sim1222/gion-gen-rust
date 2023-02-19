@@ -97,5 +97,8 @@ async fn main() {
         end.subsec_nanos() / 1_000_000
     );
 
-    seedrandom::seed_random("9999999999999999999");
+    let seedrandom = seedrandom::SeedRandom::new("9999999999999999999");
+    let random_number = seedrandom.generate();
+
+    println!("{}", random_number);
 }
