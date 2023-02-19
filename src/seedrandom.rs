@@ -1,5 +1,9 @@
+use num_bigint::{BigUint, ToBigInt};
+use num_traits::zero;
+use std::borrow::BorrowMut;
 use std::vec::Vec;
-use std::str;
+use std::{cell::RefCell, str};
+use rand::Rng;
 // use crypto::{rc4::Rc4, symmetriccipher::Encryptor};
 // use arc4::Arc4;]
 // use hex_literal::hex;
@@ -8,27 +12,63 @@ use std::str;
 // 長いと指数表示のstringになる 例 9722779.1e+23
 const WIDTH: u32 = 256;
 const MASK: u8 = 255;
-
+const CHUNKS: u32 = 6;
 
 pub fn seed_random(seed: &str) {
-    // let mut CHUNKS: i32 = 6;
-    // let mut DIGITS: i32 = 52;
-    // let mut START_DENOM: i32 = WIDTH.pow(CHUNKS as u32);
-    // let mut SIGN_IFICANCE: i32 = (2 as i32).pow(DIGITS as u32);
-    // let mut OVERFLOW: i32 = SIGN_IFICANCE * 2;
-	// let mut n: u32 = 122299249329477;
-	// let mut d: u32 = 281474976710656;
+    let DIGITS: u32 = 52;
+    let SIGN_IFICANCE: u64 = (2 as u64).pow(DIGITS);
+    let OVERFLOW: u64 = SIGN_IFICANCE * 2;
+    // let mut n: u32 = 122299249329477;
+    // let mut d: u32 = 281474976710656;
+    let START_DENOM: u64 = (WIDTH as u64).pow(CHUNKS);
 
     let mut key: Vec<u8> = Vec::new(); // max 256 (mask) length u8 array
+    let mut pool: Vec<u8> = Vec::new();
 
-	let short_seed = mix_key(seed, &mut key);
+    let mut rng = rand::thread_rng();
 
-	println!("shortSeed: {}", short_seed);
-	println!("key: {:?}", &key);
-	println!("key length: {}", key.len());
+    mix_key(&rng.gen::<f64>().to_string(), &mut pool);
 
+    let short_seed = mix_key(seed, &mut key);
 
-	// println!("{}", CHUNKS);
+    println!("shortSeed: {}", short_seed);
+    println!("key: {:?}", &key);
+    println!("key length: {}", key.len());
+
+    let arc = ARC4::new(&mut key);
+
+    println!("arg.g()");
+
+    // start generating random numbers
+    let mut n = arc.clone().g(4);
+    let mut d = START_DENOM;
+    let mut x = 0;
+
+    while n < SIGN_IFICANCE as u32 {
+        // println!("n: {}", n);
+        n = (n + x) * WIDTH;
+        d *= WIDTH as u64;
+        x = arc.clone().g(1);
+        // println!("n: {}", n);
+        // println!("d: {}", d);
+    }
+    while n as u64 >= OVERFLOW {
+        n /= 2;
+        d /= 2;
+        x >>= 1;
+    }
+    println!("(n + x) / d: {}", (n + x) as f64 / d as f64);
+    // end generating random numbers
+
+    println!("n: {}", n);
+
+    println!("mixkey 2");
+    // seed is arc.s, pool is key
+    mix_key(&arc.s.borrow_mut().to_string(), &mut pool);
+
+    println!("mixkey 3 pool: {:?}", pool); // ここまでできた
+
+    // println!("{}", CHUNKS);
 
     // let mut n = [CHUNKS as u8];
 
@@ -38,42 +78,175 @@ pub fn seed_random(seed: &str) {
 }
 
 fn mix_key(seed: &str, key: &mut Vec<u8>) -> String {
-	let mut j: u8 = 0;
-	let mut smear = 0;
+    let mut j: u8 = 0;
+    let mut smear: u32 = 0;
 
-	while j < seed.len() as u8 {
-		// println!("{:?}", (MASK & j));
-		smear ^= match key.get((MASK & j) as usize) {
-			None => 0,
-			Some(x) => *x * 19,
-		};
+    println!("seed: {}", seed);
 
-		match key.get((MASK & j) as usize) {
-			None => key.push(MASK & smear + u8::from(seed.chars().nth(j as usize).unwrap() as u8)),
-			Some(_x) => key[(MASK & j) as usize] = MASK & smear + u8::from(seed.chars().nth(j as usize).unwrap() as u8),
-		}
-		j += 1;
-	}
-	return str::from_utf8(&key).unwrap().to_string();
+    while j < seed.len() as u8 {
+        // println!("{:?}", (MASK & j));
+        smear ^= match key.get((MASK & j) as usize) {
+            None => 0,
+            Some(x) => {
+                println!("x * 19: {}", *x as u32 * 19);
+                *x as u32 * 19
+            },
+        };
+        println!("smear: {}", smear);
+
+        match key.get((MASK & j) as usize) {
+            None => key.push(
+                (MASK as u32 & (
+                    smear + u32::from(
+                        seed.chars().nth(j as usize).unwrap() as u32
+                    )
+                )
+                ).try_into().unwrap()
+            ),
+            Some(_x) => {
+                key[(MASK & j) as usize] =
+                    (MASK as u32 & (
+                        smear + u32::from(
+                            seed.chars().nth(j as usize).unwrap() as u32
+                        )
+                    )
+                    ).try_into().unwrap()
+            }
+        }
+        j += 1;
+    }
+    return key.to_string()
+}
+
+#[derive(Clone)]
+struct ARC4 {
+    key: Vec<u8>,
+    s: RefCell<Vec<u16>>,
+    i: u32,
+    j: u32,
+}
+
+impl ARC4 {
+    fn new(key: &mut Vec<u8>) -> Self {
+        let mut t: u16;
+        let mut i = 0;
+        let mut j = i;
+        let mut s: Vec<u16> = vec![];
+
+        match key.len() {
+            0 => key.push(0),
+            _ => (),
+        }
+
+        while i < WIDTH {
+            match s.get(i as usize) {
+                None => s.push(i as u16),
+                Some(_x) => (),
+            }
+            i += 1;
+        }
+
+        println!("s before: {:?}", s);
+
+        i = 0;
+        while i < WIDTH {
+            t = s[i as usize];
+            // println!("t: {}", t);
+            j = MASK as u32 & (j + key[i as usize % key.len()] as u32 + t as u32);
+            // println!("j: {}", j);
+            s[i as usize] = s[j as usize];
+            // println!("s[i]: {}", s[i as usize]);
+            s[j as usize] = t;
+            // println!("s[j]: {}", s[j as usize]);
+            i += 1;
+        }
+
+        println!("s after: {:?}", s);
+
+        let mut t: u16;
+        j = 0;
+        i = 0;
+        let mut c = 0;
+        while c < WIDTH {
+            let ti = i + 1;
+            i = MASK as u32 & ti;
+            println!("i: {}", i);
+            t = s[i as usize];
+            println!("t: {}", t);
+            let tj = j + t as u32;
+            // println!("tj: {}", tj);
+            j = MASK as u32 & tj;
+            println!("j: {}", j);
+            s[i as usize] = s[j as usize];
+            println!("s[i]: {}", s[i as usize]);
+            s[j as usize] = t;
+            println!("s[j]: {}", s[j as usize]);
+            c += 1;
+        }
+
+        println!("s after2: {:?}", s);
+
+        Self {
+            key: key.clone(),
+            s: RefCell::new(s),
+            i,
+            j,
+        }
+    }
+    fn g(self, count: u32) -> u32 {
+        let mut i = 0;
+        let mut j = self.j;
+        let mut s = self.s.borrow_mut();
+        let mut t: u16;
+        let mut r = 0;
+        println!("s: {:?}", s);
+
+        let mut c = 0;
+        while c < count {
+            let ti = i + 1;
+            i = MASK as u32 & ti;
+            println!("i: {}", i);
+            t = s[i as usize];
+            println!("t: {}", t);
+            let tj = j + t as u32;
+            println!("tj: {}", tj);
+            j = MASK as u32 & tj;
+            println!("j: {}", j);
+            s[i as usize] = s[j as usize];
+            println!("s[i]: {}", s[i as usize]);
+            s[j as usize] = t;
+            println!("s[j]: {}", s[j as usize]);
+            let ts: u128 = s[i as usize] as u128 + s[j as usize] as u128;
+            println!("ts: {}", ts);
+            println!("r * WIDTH: {}", r * WIDTH);
+            r = r * WIDTH + s[MASK as usize & ts as usize] as u32;
+            c += 1;
+        }
+        println!("r: {}", r);
+        println!("i: {}", i);
+        println!("j: {}", j);
+        return r;
+    }
 }
 
 
-// fn ARC4(key: [u8]) {
-// 	let t = key.len();
-// 	let key_length = key.len();
+trait VecToString {
+    fn to_string(&self) -> String;
+}
 
-// 	let mut i = 0;
-// 	let mut j = 0;
-// 	let mut s = vec![];
+impl VecToString for Vec<u8> {
+    fn to_string(&self) -> String {
+        // Vec<u8> -> Vec<u16>
+        let mut v: Vec<u16> = vec![];
+        for i in 0..self.len() {
+            v.push(self[i] as u16);
+        }
+        return String::from_utf16(v.as_slice()).unwrap();
+    }
+}
 
-//     let WIDTH = 256;
-
-// 	while i < WIDTH {
-// 		s[i] = i += 1;
-// 		t += 1;
-// 	}
-		
-// 	}
-// }
-
-
+impl VecToString for Vec<u16> {
+    fn to_string(&self) -> String {
+        return String::from_utf16(&self.clone()).unwrap();
+    }
+}
