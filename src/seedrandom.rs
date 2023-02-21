@@ -22,30 +22,30 @@ pub struct SeedRandom {
     pool: Vec<u8>,
     key: Vec<u8>,
     short_seed: String,
-    arc: ARC4,
+    arc: RefCell<ARC4>,
     n: u128,
     d: u128,
     x: u128,
 }
 
 impl SeedRandom {
-    pub fn new(seed: &str) -> Self {
+    pub fn new(seed: String) -> Self {
         let mut key: Vec<u8> = Vec::new(); // max 256 (mask) length u8 array
         let mut pool: Vec<u8> = Vec::new();
 
         let mut rng = rand::thread_rng();
 
-        mix_key(&rng.gen::<f64>().to_string(), &mut pool);
+        mix_key(rng.gen::<f64>().to_string(), &mut pool);
 
         let short_seed = mix_key(seed, &mut key);
 
-        println!("shortSeed: {}", short_seed);
-        println!("key: {:?}", &key);
-        println!("key length: {}", key.len());
+        // println!("shortSeed: {}", short_seed);
+        // println!("key: {:?}", &key);
+        // println!("key length: {}", key.len());
 
         let arc = ARC4::new(&mut key);
 
-        println!("arg.g()");
+        // println!("arg.g()");
 
         // start generating random numbers
         let mut n = arc.clone().g(CHUNKS);
@@ -53,87 +53,95 @@ impl SeedRandom {
         let mut x = 0;
 
         while n < SIGN_IFICANCE as u128 {
-            // println!("n: {}", n);
+            // // println!("n: {}", n);
             n = (n + x) * WIDTH as u128;
             d *= WIDTH as u128;
             x = arc.clone().g(1);
-            // println!("n: {}", n);
-            // println!("d: {}", d);
+            // // println!("n: {}", n);
+            // // println!("d: {}", d);
         }
         while n as u64 >= OVERFLOW {
             n /= 2;
             d /= 2;
             x >>= 1;
         }
-        // println!("(n + x) / d: {}", (n + x) as f64 / d as f64);
+        // // println!("(n + x) / d: {}", (n + x) as f64 / d as f64);
         // end generating random numbers
 
-        println!("n: {}", n);
+        // println!("n: {}", n);
 
-        println!("mixkey 2");
+        // println!("mixkey 2");
         // seed is arc.s, pool is key
-        mix_key(&arc.s.borrow_mut().to_string(), &mut pool);
+        mix_key(arc.s.borrow_mut().to_string(), &mut pool);
 
-        println!("mixkey 3 pool: {:?}", pool); // ここまでできた
+        // println!("mixkey 3 pool: {:?}", pool); // ここまでできた
 
-        // println!("{}", CHUNKS);
+        // // println!("{}", CHUNKS);
 
         // let mut n = [CHUNKS as u8];
 
         // rc4.apply_keystream(&mut n);
 
-        // println!("n: {:?}", n);
+        // // println!("n: {:?}", n);
 
-        Self { pool, key, short_seed, arc, n, d, x}
+        Self { pool, key, short_seed, arc: RefCell::new(arc), n, d, x}
     }
 
-    pub fn generate(mut self) -> f64 {
-        println!("prng now");
+    pub fn generate(&self) -> f64 {
+        // println!("prng now");
         // start generating random numbers
-        println!("CHUNKS: {}", CHUNKS);
+        // println!("CHUNKS: {}", CHUNKS);
 
-        let arc = self.arc.clone();
+        let arc = self.arc.borrow_mut();
 
-        let mut n = arc.clone().g(CHUNKS); // TODO: does not change arc.s in g function
-        let mut d = self.d;
-        let mut x = self.x;
-        println!("s: {:?}", arc.clone().s);
+        let mut n = arc.g(CHUNKS); // TODO: does not change arc.s in g function
+        let mut d = START_DENOM as u128;
+        let mut x = 0;
+        // println!("s: {:?}", arc.s);
 
+
+        // println!("n first: {}", n); //ここまで正常
         while n < SIGN_IFICANCE as u128 {
-            // println!("n: {}", n);
+            // // println!("n: {}", n);
             n = (n + x) * WIDTH as u128;
             d *= WIDTH as u128;
-            x = self.arc.borrow_mut().clone().g(1);
+            x = arc.g(1);
             // println!("n: {}", n);
             // println!("d: {}", d);
+            // println!("x: {}", x);
         }
+        // println!("n second: {}", n); //異常
         while n as u64 >= OVERFLOW {
             n /= 2;
             d /= 2;
             x >>= 1;
         }
-        println!("(n + x) / d: {}", (n + x) as f64 / d as f64);
+        // println!("n last  : {}", n);
+        // println!("d last  : {}", d);
+        // println!("x last  : {}", x);
+        // println!("n + x: {}", n + x);
+        // println!("(n + x) / d: {}", (n + x) as f64 / d as f64);
         // end generating random numbers
         return (n + x) as f64 / d as f64;
     }
 }
 
-fn mix_key(seed: &str, key: &mut Vec<u8>) -> String {
+fn mix_key(seed: String, key: &mut Vec<u8>) -> String {
     let mut j: u8 = 0;
     let mut smear: u32 = 0;
 
-    println!("seed: {}", seed);
+    // println!("seed: {}", seed);
 
     while j < seed.len() as u8 {
-        // println!("{:?}", (MASK & j));
+        // // println!("{:?}", (MASK & j));
         smear ^= match key.get((MASK & j) as usize) {
             None => 0,
             Some(x) => {
-                println!("x * 19: {}", *x as u32 * 19);
+                // println!("x * 19: {}", *x as u32 * 19);
                 *x as u32 * 19
             }
         };
-        // println!("smear: {}", smear);
+        // // println!("smear: {}", smear);
 
         match key.get((MASK & j) as usize) {
             None => key.push(
@@ -157,8 +165,8 @@ fn mix_key(seed: &str, key: &mut Vec<u8>) -> String {
 struct ARC4 {
     key: Vec<u8>,
     s: RefCell<Vec<u16>>,
-    i: u32,
-    j: u32,
+    i: RefCell<u32>,
+    j: RefCell<u32>,
 }
 
 impl ARC4 {
@@ -181,22 +189,22 @@ impl ARC4 {
             i += 1;
         }
 
-        println!("s before: {:?}", s);
+        // // println!("s before: {:?}", s);
 
         i = 0;
         while i < WIDTH {
             t = s[i as usize];
-            // println!("t: {}", t);
+            // // println!("t: {}", t);
             j = MASK as u32 & (j + key[i as usize % key.len()] as u32 + t as u32);
-            // println!("j: {}", j);
+            // // println!("j: {}", j);
             s[i as usize] = s[j as usize];
-            // println!("s[i]: {}", s[i as usize]);
+            // // println!("s[i]: {}", s[i as usize]);
             s[j as usize] = t;
-            // println!("s[j]: {}", s[j as usize]);
+            // // println!("s[j]: {}", s[j as usize]);
             i += 1;
         }
 
-        println!("s after: {:?}", s);
+        // // println!("s after: {:?}", s);
 
         let mut t: u16;
         j = 0;
@@ -205,74 +213,75 @@ impl ARC4 {
         while c < WIDTH {
             let ti = i + 1;
             i = MASK as u32 & ti;
-            println!("i: {}", i);
+            // // println!("i: {}", i);
             t = s[i as usize];
-            println!("t: {}", t);
+            // // println!("t: {}", t);
             let tj = j + t as u32;
-            // println!("tj: {}", tj);
+            // // println!("tj: {}", tj);
             j = MASK as u32 & tj;
-            println!("j: {}", j);
+            // // println!("j: {}", j);
             s[i as usize] = s[j as usize];
-            println!("s[i]: {}", s[i as usize]);
+            // // println!("s[i]: {}", s[i as usize]);
             s[j as usize] = t;
-            println!("s[j]: {}", s[j as usize]);
+            // // println!("s[j]: {}", s[j as usize]);
             c += 1;
         }
 
-        println!("s after2: {:?}", s);
+        // // println!("s after2: {:?}", s);
 
         Self {
             key: key.clone(),
             s: RefCell::new(s),
-            i,
-            j,
+            i: RefCell::new(i),
+            j: RefCell::new(j),
         }
     }
-    fn g(self, count: u32) -> u128 {
-        let mut i = 0;
-        let mut j = self.j;
+    fn g(&self, count: u32) -> u128 {
+        let mut i = self.i.borrow_mut();
+        let mut j = self.j.borrow_mut();
         let mut s = self.s.borrow_mut();
         let mut t: u16;
         let mut r: u128 = 0;
-        println!("s: {:?}", s);
-        println!("i: {}", i);
-        println!("j: {}", j);
-        println!("count: {}", count);
-        println!("-----------------");
+        // // println!("-----g start------------");
+        // // println!("s: {:?}", s);
+        // // println!("i: {}", i);
+        // // println!("j: {}", j);
+        // // println!("count: {}", count);
+        // // println!("------------------------");
 
         let mut c = 0;
         while c < count {
-            let ti = i + 1;
-            i = MASK as u32 & ti;
-            println!("i: {}", i);
-            t = s[i as usize];
-            println!("t: {}", t);
-            let tj = j + t as u32;
-            println!("tj: {}", tj);
-            j = MASK as u32 & tj;
-            println!("j: {}", j);
-            s[i as usize] = s[j as usize];
-            if s[i as usize] != s[j as usize] {
-                panic!("s[i] is not equal to s[j]: {}", s[i as usize])
+            let ti = *i + 1;
+            *i = MASK as u32 & ti;
+            // // println!("i: {}", i);
+            t = s[*i as usize];
+            // // println!("t: {}", t);
+            let tj = *j + t as u32;
+            // // println!("tj: {}", tj);
+            *j = MASK as u32 & tj;
+            // // println!("j: {}", j);
+            s[*i as usize] = s[*j as usize];
+            if s[*i as usize] != s[*j as usize] {
+                panic!("s[i] is not equal to s[j]: {}", s[*i as usize])
             }
-            println!("s[i]: {}", s[i as usize]);
-            s[j as usize] = t;
-            if s[j as usize] != t {
-                panic!("s[j] is not equal to t: {}", s[j as usize])
+            // // println!("s[i]: {}", s[*i as usize]);
+            s[*j as usize] = t;
+            if s[*j as usize] != t {
+                panic!("s[j] is not equal to t: {}", s[*j as usize])
             }
-            println!("s[j]: {}", s[j as usize]);
-            let ts: u128 = s[i as usize] as u128 + s[j as usize] as u128;
-            println!("ts: {}", ts);
-            println!("r * WIDTH: {}", r * WIDTH as u128);
+            // // println!("s[j]: {}", s[*j as usize]);
+            let ts: u128 = s[*i as usize] as u128 + s[*j as usize] as u128;
+            // // println!("ts: {}", ts);
+            // // println!("r * WIDTH: {}", r * WIDTH as u128);
             r = r * WIDTH as u128 + s[MASK as usize & ts as usize] as u128;
-            println!("r: {}", r);
-            println!("------------------");
+            // // println!("r: {}", r);
+            // // println!("------------------");
             c += 1;
         }
-        println!("r: {}", r);
-        println!("i: {}", i);
-        println!("j: {}", j);
-        println!("s last: {:?}", s); // s is not changed outside of the function
+        // // println!("r: {}", r);
+        // // println!("i: {}", i);
+        // // println!("j: {}", j);
+        // println!("s last: {:?}", s); // s is not changed outside of the function
         return r;
     }
 }
