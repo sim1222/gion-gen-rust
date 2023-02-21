@@ -1,12 +1,6 @@
-use num_bigint::{BigUint, ToBigInt};
-use num_traits::zero;
 use rand::Rng;
-use std::borrow::BorrowMut;
+use std::cell::RefCell;
 use std::vec::Vec;
-use std::{cell::RefCell, str};
-// use crypto::{rc4::Rc4, symmetriccipher::Encryptor};
-// use arc4::Arc4;]
-// use hex_literal::hex;
 
 // seed はnumberからstringにしたもの
 // 長いと指数表示のstringになる 例 9722779.1e+23
@@ -19,13 +13,13 @@ const OVERFLOW: u64 = SIGN_IFICANCE * 2;
 const START_DENOM: u64 = (WIDTH as u64).pow(CHUNKS);
 
 pub struct SeedRandom {
-    pool: Vec<u8>,
-    key: Vec<u8>,
-    short_seed: String,
+    // pool: Vec<u8>,
+    // key: Vec<u8>,
+    // short_seed: String,
     arc: RefCell<ARC4>,
-    n: u128,
-    d: u128,
-    x: u128,
+    // n: u128,
+    // d: u128,
+    // x: u128,
 }
 
 impl SeedRandom {
@@ -37,7 +31,8 @@ impl SeedRandom {
 
         mix_key(rng.gen::<f64>().to_string(), &mut pool);
 
-        let short_seed = mix_key(seed, &mut key);
+        // let short_seed = mix_key(seed, &mut key);
+        mix_key(seed, &mut key);
 
         // println!("shortSeed: {}", short_seed);
         // println!("key: {:?}", &key);
@@ -84,7 +79,15 @@ impl SeedRandom {
 
         // // println!("n: {:?}", n);
 
-        Self { pool, key, short_seed, arc: RefCell::new(arc), n, d, x}
+        Self {
+            // pool,
+            // key,
+            // short_seed,
+            arc: RefCell::new(arc),
+            // n,
+            // d,
+            // x,
+        }
     }
 
     pub fn generate(&self) -> f64 {
@@ -98,7 +101,6 @@ impl SeedRandom {
         let mut d = START_DENOM as u128;
         let mut x = 0;
         // println!("s: {:?}", arc.s);
-
 
         // println!("n first: {}", n); //ここまで正常
         while n < SIGN_IFICANCE as u128 {
@@ -163,7 +165,7 @@ fn mix_key(seed: String, key: &mut Vec<u8>) -> String {
 
 #[derive(Clone)]
 struct ARC4 {
-    key: Vec<u8>,
+    // key: Vec<u8>,
     s: RefCell<Vec<u16>>,
     i: RefCell<u32>,
     j: RefCell<u32>,
@@ -230,7 +232,7 @@ impl ARC4 {
         // // println!("s after2: {:?}", s);
 
         Self {
-            key: key.clone(),
+            // key: key.clone(),
             s: RefCell::new(s),
             i: RefCell::new(i),
             j: RefCell::new(j),

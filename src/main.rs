@@ -1,35 +1,32 @@
 mod patterns;
 mod seedrandom;
 
-use std::{thread, cell::{RefCell, Ref}};
+use std::cell::RefCell;
 
-use rand::{
-    seq::{IteratorRandom, SliceRandom},
-    Rng,
-};
-use tokio_stream::StreamExt;
+use rand::Rng;
 
-use std::time::{Duration, Instant};
+// use std::time::{Duration, Instant};
 
 struct GionGenerator {
     seed_random: RefCell<seedrandom::SeedRandom>,
     // seed: RefCell<String>,
-    salt: u64,
+    // salt: u64,
 }
 impl GionGenerator {
     fn new() -> Self {
-        let mut seed = ((rand::thread_rng().gen::<f64>() * 1000000.0).floor() as u64).to_string();
+        let seed = ((rand::thread_rng().gen::<f64>() * 1000000.0).floor() as u64).to_string();
         let seed_random = seedrandom::SeedRandom::new(seed.clone());
         Self {
             seed_random: RefCell::new(seed_random),
             // seed: RefCell::new(seed),
-            salt: 0,
+            // salt: 0,
         }
     }
 
     fn pick_random_character(&self, string: String) -> String {
         // return string.chars().choose().unwrap().to_string();
-        let num = (self.seed_random.borrow().generate() * string.chars().count() as f64).floor() as usize;
+        let num =
+            (self.seed_random.borrow().generate() * string.chars().count() as f64).floor() as usize;
         // println!("num: {}", num);
         return string.chars().nth(num).unwrap().to_string();
     }
